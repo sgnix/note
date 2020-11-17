@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+NOTE_KEY=${NOTE_KEY:-sge@pobox.com}
+NOTE_HOME=${NOTE_HOME:-$HOME/Sync/Notes}
+NOTE_SEARCH=${NOTE_SEARCH:-grep -e}
+EDITOR=${EDITOR:-vi}
+PAGER=${PAGER:-bat}
+
+GPG=$(which gpg)
+GPG_DECODE="$GPG -q -d"
+GPG_ENCODE="$GPG -q -e -a -r $NOTE_KEY"
+
+function error() {
+  >&2 echo "Error: $1"
+  exit 255
+}
+
+function list() {
+  find "$NOTE_HOME" | grep "\.gpg"
+}
+
+function encode() {
+  local TM=$1
+  local FN=$2
+  read -r -p "Save changes? [Y/n] " input < /dev/tty
+  if [[ $input = Y ]] || [[ $input = y ]] || [[ -z $input ]]; then
+     $GPG_ENCODE "$TM" > "$FN"
+  fi
+}
+
+function create() {
+  local FN=$1.gpg
+  [[ -e $FN ]] && error "Note '$FN' already exists"
+  local TM; TM=$(mktemp)
+  trap 'rm -f "$TM"' EXIT
+  $EDITOR "$TM"
+  encode "$TM" "$FN"
+}
+
+function edit() {
+  [[ ! -r ${1:-} ]] && error "Can not open note '$1'"
+  local FN; FN=$1
+  local TM; TM=$(mktemp)
+  trap 'rm -f "$TM"' EXIT
+  $GPG_DECODE "$FN" > "$TM"
+  $EDITOR "$TM"
+  encode "$TM" "$FN"
+}
+
+function view() {
+  [[ ! -r ${1:-} ]] && error "Can not open note '$1'"
+  local FN=$1
+  cat "$GPG_DECODE" "$FN" | $PAGER
+}
+
+function search() {
+  local SR=$1
+  for FN in $(NOTE_HOME=$NOTE_HOME $0 -l); do
+    if [[ -n $($GPG_DECODE "$FN" | $NOTE_SEARCH "$SR") ]]; then
+      echo "$FN"
+    fi
+  done
+}
+
+function usage() {
+  echo "$0 [options] [path]"
+  echo "-p <path>     set notes path"
+  echo "-l            list all notes"
+  echo "-v <path>     view note at path"
+  echo "-e <path>     edit note at path"
+  echo "-c <path>     create note at path"
+}
+
+[[ -z $GPG ]] && error "No gpg in path"
+
+[[ $# = 0 ]] && usage
+
+while getopts "le:s:p:n:v:" arg; do
+  case ${arg} in
+    p) NOTE_HOME="$OPTARG" ;;
+    l) list ;;
+    v) view "$OPTARG" ;;
+    e) edit "$OPTARG" ;;
+    s) search "$OPTARG" ;;
+    n) create "$OPTARG" ;;
+    *) usage
+  esac
+done
