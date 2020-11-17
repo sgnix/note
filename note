@@ -26,7 +26,7 @@ function encode() {
   local FN=$2
   read -r -p "Save changes? [Y/n] " input < /dev/tty
   if [[ $input = Y ]] || [[ $input = y ]] || [[ -z $input ]]; then
-     $GPG_ENCODE "$TM" > "$FN"
+     cat "$TM" | $GPG_ENCODE > "$FN"
   fi
 }
 
@@ -34,7 +34,7 @@ function create() {
   local FN=$1.gpg
   [[ -e $FN ]] && error "Note '$FN' already exists"
   local TM; TM=$(mktemp)
-  trap 'rm -f "$TM"' EXIT
+  trap "rm -f $TM" EXIT
   $EDITOR "$TM"
   encode "$TM" "$FN"
 }
@@ -43,7 +43,7 @@ function edit() {
   [[ ! -r ${1:-} ]] && error "Can not open note '$1'"
   local FN; FN=$1
   local TM; TM=$(mktemp)
-  trap 'rm -f "$TM"' EXIT
+  trap "rm -f $TM" EXIT
   $GPG_DECODE "$FN" > "$TM"
   $EDITOR "$TM"
   encode "$TM" "$FN"
@@ -52,7 +52,7 @@ function edit() {
 function view() {
   [[ ! -r ${1:-} ]] && error "Can not open note '$1'"
   local FN=$1
-  cat "$GPG_DECODE" "$FN" | $PAGER
+  $GPG_DECODE "$FN" | $PAGER
 }
 
 function search() {
@@ -70,7 +70,7 @@ function usage() {
   echo "-l            list all notes"
   echo "-v <path>     view note at path"
   echo "-e <path>     edit note at path"
-  echo "-c <path>     create note at path"
+  echo "-n <path>     create new note at path"
 }
 
 [[ -z $GPG ]] && error "No gpg in path"
